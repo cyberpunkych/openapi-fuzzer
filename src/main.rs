@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::{fs, time::Instant};
+use std::env;
 
 use anyhow::{Context, Result};
 use argh::FromArgs;
@@ -14,7 +15,6 @@ use fuzzer::Fuzzer;
 use openapi_utils::SpecExt;
 use openapiv3::OpenAPI;
 use url::{ParseError, Url};
-
 use crate::fuzzer::FuzzResult;
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -188,11 +188,23 @@ fn main() -> Result<ExitCode> {
 }
 
 fn create_agent(verify_cert: bool) -> ureq::Agent {
+    let mut agent_builder = ureq::AgentBuilder::new();
+
+    // Check if the HTTP_PROXY environment variable is set
+    if let Ok(proxy_url) = env::var("HTTP_PROXY") {
+        // Parse the proxy URL and set it on the agent builder
+        if let Ok(proxy) = ureq::Proxy::new(&proxy_url) {
+            agent_builder = agent_builder.proxy(proxy);
+        } else {
+            eprintln!("Failed to parse HTTP_PROXY: {}", proxy_url);
+        }
+    }
+
     if verify_cert {
-        ureq::agent()
+        agent_builder.build()
     } else {
         let conf = verifier::skip_tls_verification_config();
-        ureq::AgentBuilder::new()
+        agent_builder
             .tls_config(std::sync::Arc::new(conf))
             .build()
     }
